@@ -93,17 +93,73 @@ Alarms 1–4 are evaluated **only** when a reading becomes the new latest state;
 - **Starter** (`environment/app`): compiles and boots, but contains three `NotImplementedError` stubs (`decode_registers`, `should_become_latest_state`, `evaluate_telemetry_alarms`) and two subtle bugs (dedup key compares `sequence<=?` instead of `=?`; the poller's reject branch resets rather than increments the failure counter).
 - **Solution** (`solution/app`): the complete, correct implementation that passes the full verifier.
 
-## Running locally
+## Testing
+
+> **On Windows, run everything in Git Bash** (Start menu → "Git Bash"), not PowerShell or CMD. The scripts use bash syntax (`export`, `VAR=value`, and `\` line continuations) that other shells don't understand.
+
+The test script auto-detects the project venv (`.venv-dev`); it only needs Python 3.12 with `fastapi`, `httpx`, `uvicorn`, and `pydantic`. No manual install is required if the venv already exists.
+
+### 1. Full verifier against the reference (oracle)
 
 ```bash
-# Run the sealed verifier against the reference solution (oracle):
+cd <repo-root>
 bash solution/solve.sh
-
-# Run the verifier against an arbitrary app directory:
-GATEWAY_DIR=<path-to-app> bash tests/test.sh
 ```
 
-The verifier expects Python 3.12 with FastAPI, httpx, uvicorn, and pydantic, and starts the simulator itself — no runtime network is required.
+Starts the simulator (port 8899) and the reference gateway (port 8111), runs all 74 checks, then tears both down. **Expected: `74/74`, `ALL CHECKS PASSED`, exit code 0.**
+
+### 2. Starter (no-progress baseline) — expected to FAIL
+
+```bash
+cd <repo-root>
+GATEWAY_DIR=environment/app bash tests/test.sh
+```
+
+The starter is intentionally incomplete, so this reports roughly `18/74` and exits 1. That is the "nop floor" proving the task is genuinely unsolved at the start — not a bug.
+
+### 3. Manual / interactive testing
+
+Use three Git Bash terminals. First, free port 8777 if a leftover simulator is running:
+
+```bash
+netstat -ano | grep ':8777' | grep LISTENING | awk '{print $5}' | xargs -r -n1 taskkill //F //PID
+```
+
+**Terminal 1 — simulator** (http://127.0.0.1:8777):
+
+```bash
+cd <repo-root>
+.venv-dev/Scripts/python.exe environment/simulator/simulator.py
+```
+
+**Terminal 2 — gateway** (http://127.0.0.1:8111):
+
+```bash
+cd <repo-root>
+export PYTHONPATH="$PWD/solution/app"
+export SIMULATOR_BASE_URL="http://127.0.0.1:8777"
+export GATEWAY_DB_PATH="$PWD/gateway.db"
+.venv-dev/Scripts/python.exe -m uvicorn main:app --host 127.0.0.1 --port 8111
+```
+
+**Terminal 3 — drive it:**
+
+```bash
+# register a machine on the simulator
+curl -X POST http://127.0.0.1:8777/control/device -H "Content-Type: application/json" -d '{"id":"d1","register_map":"standard-v1"}'
+
+# (re)discover the fleet, then poll
+curl -X POST http://127.0.0.1:8111/admin/reset
+curl -X POST http://127.0.0.1:8111/poll
+
+# query state
+curl http://127.0.0.1:8111/machines
+curl http://127.0.0.1:8111/machines/d1/status
+curl http://127.0.0.1:8111/machines/d1/history
+curl http://127.0.0.1:8111/alarms
+```
+
+The simulator's control API (`POST /control/device/{id}/script`) can inject `outofrange`, `invalidstatus`, `timeout`, `5xx`, `notfound`, `malformed`, and `missing` responses to exercise the failure modes interactively.
 
 ## Metadata
 
