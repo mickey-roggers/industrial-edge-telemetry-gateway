@@ -103,7 +103,7 @@ class Poller:
             # §8.3 — missing register / out-of-range / invalid status -> reject.
             decoded, rejection = decode_registers(payload, register_map)
             if rejection is not None:
-                self._increment_failure(machine_id)
+                self._reset_failure(machine_id)  # BUG: A6 rejection must increment
                 return self._outcome(
                     "rejected", machine_id, rejection.reason, register_map
                 )

@@ -95,74 +95,14 @@ def decode_registers(
 ) -> tuple[Optional[DecodedReading], Optional[DecodeRejection]]:
     """Decode a raw device payload into engineering values, or reject it.
 
-    ``raw`` must contain at least: ``sequence`` (int), ``timestamp`` (ISO str),
-    and ``registers`` (dict mapping register-number -> int), plus the map itself
-    comes from the device's ``register_map`` field (passed in here).
+    TODO(agent): implement A3. Apply the device's register_map scaling
+    (temperature & vibration = raw / 10.0; pressure = raw / 100.0; status is a
+    direct enum). Reject the ENTIRE reading when any required register is
+    missing, any decoded value is outside the map's range, or the status code is
+    invalid for that map. Return (DecodedReading, None) on success, else
+    (None, DecodeRejection).
     """
-    if register_map not in TEMP_RANGES:
-        return None, DecodeRejection(reason="invalid_status")
-
-    registers = raw.get("registers")
-    if not isinstance(registers, dict):
-        return None, DecodeRejection(reason="missing_register")
-
-    # JSON serializes dict keys as strings, so normalize register numbers to int.
-    norm = {}
-    for k, v in registers.items():
-        try:
-            key = int(k)
-        except (TypeError, ValueError):
-            continue
-        norm[key] = v
-
-    # §3.10 — missing any required register -> entire reading rejected.
-    for reg in REQUIRED_REGISTERS:
-        if reg not in norm:
-            return None, DecodeRejection(reason="missing_register")
-
-    raw_temp = int(norm[40001])
-    raw_pressure = int(norm[40002])
-    raw_vibration = int(norm[40003])
-    status_code = int(norm[40004])
-
-    # Register scaling (per spec): temperature and vibration are encoded in units
-    # of 0.1 (raw 253 -> 25.3 C), pressure in units of 0.01 (raw 10132 -> 101.32 kPa).
-    temperature_c = raw_temp / 10.0
-    pressure_kpa = raw_pressure / 100.0
-    vibration_mm_s = raw_vibration / 10.0
-
-    temp_lo, temp_hi = TEMP_RANGES[register_map]
-    pres_lo, pres_hi = PRESSURE_RANGES[register_map]
-    vib_lo, vib_hi = VIBRATION_RANGES[register_map]
-
-    # §3.11 — a value outside the PHYSICAL envelope (not just the map's normal
-    # band) is rejected at Stage A. Values that merely exceed an operational
-    # limit are still stored and can drive alarms (see PHYSICAL_ENVELOPE note).
-    if not _is_in_range(temperature_c, *PHYSICAL_ENVELOPE["temperature_c"]):
-        return None, DecodeRejection(reason="out_of_range")
-    if not _is_in_range(pressure_kpa, *PHYSICAL_ENVELOPE["pressure_kpa"]):
-        return None, DecodeRejection(reason="out_of_range")
-    if not _is_in_range(vibration_mm_s, *PHYSICAL_ENVELOPE["vibration_mm_s"]):
-        return None, DecodeRejection(reason="out_of_range")
-
-    # §3.12 — unrecognized status code for that map -> entire reading rejected.
-    if status_code not in VALID_STATUS_CODES[register_map]:
-        return None, DecodeRejection(reason="invalid_status")
-
-    return (
-        DecodedReading(
-            sequence=int(raw["sequence"]),
-            timestamp=str(raw["timestamp"]),
-            temperature_c=temperature_c,
-            pressure_kpa=pressure_kpa,
-            vibration_mm_s=vibration_mm_s,
-            status_code=status_code,
-            status=STATUS_LABELS[status_code],
-            register_map=register_map,
-        ),
-        None,
-    )
-
+    raise NotImplementedError("decode_registers is not implemented")
 
 def map_max_temperature(register_map: str) -> float:
     return TEMP_RANGES[register_map][1]

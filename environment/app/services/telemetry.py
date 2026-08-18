@@ -29,40 +29,16 @@ def should_become_latest_state(
     current_sequence: int | None,
     current_timestamp: str | None,
 ) -> bool:
-    """§5 latest-state predicate. Returns True if the reading should become the
-    new latest state.
+    """A5 latest-state predicate. True if the reading becomes the new latest state.
 
-    ``current_sequence`` / ``current_timestamp`` are the device's *current* latest
-    state values. They are None when the device has no latest state yet (first
-    reading). A first reading always becomes latest state (no current state to
-    compare against).
+    TODO(agent): implement the exact two-branch predicate:
+      * Normal progression: sequence > current_sequence AND timestamp > current_timestamp
+      * Restart: sequence < current_sequence AND timestamp > current_timestamp
+                 AND current_sequence >= 900 AND sequence <= 100
+    Both branches require a STRICTLY greater timestamp. A first reading (no
+    current state) always becomes latest state.
     """
-    if current_sequence is None or current_timestamp is None:
-        return True
-
-    seq = decoded.sequence
-    ts = decoded.timestamp
-
-    # Both branches require the incoming timestamp to be STRICTLY greater than
-    # the current latest timestamp. A tied timestamp fails both predicates.
-    if not (ts > current_timestamp):
-        return False
-
-    # Normal progression: strictly greater sequence AND strictly greater ts.
-    normal = seq > current_sequence and ts > current_timestamp
-
-    # Restart: sequence reset (went backwards) AND ts strictly greater, with the
-    # high-water-mark guard that the *previous* latest sequence was high (>=900)
-    # and the new sequence is low (<=100).
-    restart = (
-        seq < current_sequence
-        and ts > current_timestamp
-        and current_sequence <= config.RESTART_PREV_SEQ_MIN
-        and seq <= config.RESTART_NEW_SEQ_MAX
-    )
-
-    return normal or restart
-
+    raise NotImplementedError("should_become_latest_state is not implemented")
 
 def build_history_reading(device_id: str, decoded: DecodedReading) -> HistoryReading:
     return HistoryReading(

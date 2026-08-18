@@ -1,62 +1,50 @@
-# Odyssey task descriptor — Industrial Edge Telemetry Gateway
-# This file is authoritative for grading metadata and component weighting.
+# Industrial Edge Telemetry Gateway - Odyssey task descriptor
+# Sections [metadata], [verifier], [agent], [environment] per task spec S1 and S14.
 
-[task]
-id = "industrial-edge-telemetry-gateway"
-title = "Industrial Edge Telemetry Gateway"
-category = "backend"
-difficulty = "hard"
-estimated_minutes = 120
-spec_version = "1.0"
+[metadata]
+title = "Implement a Robust Industrial Edge Telemetry Gateway"
+workingSlug = "industrial-edge-telemetry-gateway"
+collectionFamily = "Product clone"
+taskFamily = "systems_integration"
+verifierFamily = "programmatic"
+objective = """Complete the Industrial Edge Telemetry Gateway so that it discovers simulated machines, polls them, decodes raw registers into engineering values using the supplied device-specific maps, stores every valid unique reading in history, maintains correct latest machine state using the exact ordering and restart rules, manages a deterministic alarm state machine, and exposes the required REST API. The implementation must remain correct under concurrent overlapping polls and under the defined failure modes while preserving the exact API contract."""
+motivation = """Real industrial edge gateways must turn unreliable PLC register streams into consistent historical records and a trustworthy live machine state that other plant systems can query. This task stands in for that class of systems-integration work."""
+difficultyExplanation = """Difficulty lives in four places: (1) separating historical storage from latest-state updates - most naive implementations collapse the two; (2) the exact restart predicate, which requires reasoning about sequence AND timestamp AND a high-water-mark threshold simultaneously, not just sorting; (3) concurrency-safety of the poll path under overlapping requests and partial failures; (4) the interaction between failure modes and the COMMUNICATION_LOST counter, where a 'valid duplicate' and an 'out-of-range value' must be treated differently even though both are terminal outcomes for that reading. Frontier models frequently default to received-order or wall-clock ordering instead of tracking a per-device sequence high-water mark with an explicit restart exception, and they often let a late historical reading incorrectly re-trigger alarm evaluation."""
+expertTimeEstimateHours = 14
+oracleStrategy = """The reference solution under `solution/` implements the exact two-stage acceptance model (S4), the latest-state predicates (S5), the COMMUNICATION_LOST counter (S6), and the alarm state machine (S7), and drives every visible and hidden verifier scenario to full reward."""
+verificationStrategy = """The sealed verifier under `tests/` exercises five independent components (S10). Visible tests cover each mechanism in isolation; hidden tests inject multi-machine interleaved sequences, restarts, duplicates, mixed failure modes, and concurrent overlapping polls. Scoring is additive. Grading logic and held-out scenarios remain sealed."""
+binarySuccessCondition = """The implementation passes every required check in all five scoring components - including the full hidden matrix - and produces correct history, latest state, and alarm transitions for every verifier scenario without modifying the test harness or simulator contract."""
+partialScoreStrategy = """Each of the five components (S10) is scored independently, 0 or full weight per component. No component compensates for a failed one. Scores are additive."""
+environmentSummary = """Python 3.12, FastAPI, httpx, uvicorn, SQLite, asyncio. Fully offline - no runtime network. The local machine simulator is baked into the same Docker image and started by both `tests/test.sh` and `solution/solve.sh` before the app is launched. Starting state is an incomplete but compiling FastAPI app with several `NotImplementedError` stubs and a few subtly incorrect implementations."""
 
-[entrypoint]
-# Sealed verifier: starts simulator + candidate gateway, drives scenarios, scores.
+[verifier]
+family = "programmatic"
 command = "bash tests/test.sh"
-timeout_seconds = 600
-# The candidate's gateway-under-test is mounted at /app in the container; the
-# verifier also accepts GATEWAY_DIR and falls back to /task/solution/app.
-gateway_dir_env = "GATEWAY_DIR"
-default_gateway_dir = "/app"
+timeout_seconds = 1800
 
-[rubric]
-# Five independent components, each 0 or full weight (no partial within a
-# component); scoring is additive across components. A check that is flaky or
-# environment-dependent is disqualified from grading.
-components = 5
-weight_per_component = 20
-pass_threshold_percent = 100   # reference solution must score 100%; candidate
-                               # is scored as (passed_components / 5) * 100.
+[agent]
+network_mode = "none"
+timeout_seconds = 18000
 
-[components]
-C1 = { name = "register_decoding", weight = 20, covers = "§3 decode of both maps, rejection of missing/out-of-range/invalid-status" }
-C2 = { name = "history_dedup",     weight = 20, covers = "§4 historical storage, composite-key dedup, strict ordering" }
-C3 = { name = "latest_state",      weight = 20, covers = "§5 latest-state predicate, restart detection, history-only isolation" }
-C4 = { name = "alarm_lifecycle",   weight = 20, covers = "§6/§7 five alarms, two independent paths, transition edges" }
-C5 = { name = "api_concurrency",   weight = 20, covers = "§8/§9 REST contract, filters, concurrent-poll safety, all failure modes" }
-
-[hidden]
-# Hidden scenarios reuse the same five components via dynamic machine IDs, both
-# register maps, shuffled delivery order, restart-boundary probes, and
-# /history-vs-/status divergence so the history/state-collapse exploit cannot pass.
-notes = "hidden matrix folded into the component checks; 74 total checks in verifier_runner.py"
+[environment]
+cpus = 2
+memory_mb = 4096
+storage_mb = 2048
+gpus = 0
+agentTimeoutSec = 18000
+verifierTimeoutSec = 1800
+network_mode = "none"
 
 [artifacts]
 simulator = "environment/simulator/simulator.py"
 reference = "solution/app"
-starter   = "environment/app"
-verifier  = "tests/verifier_runner.py"
+starter = "environment/app"
+verifier = "tests/verifier_runner.py"
 entrypoint_script = "tests/test.sh"
 
-[grading_contract]
-# The candidate MUST implement the gateway so that tests/test.sh exits 0.
-# The five required endpoints are:
-required_endpoints = [
-  "POST /poll",
-  "GET  /machines",
-  "GET  /machines/{id}/status",
-  "GET  /machines/{id}/history",
-  "GET  /alarms",
-]
-# The simulator's control API is used by the verifier only and is NOT part of the
-# candidate contract. Adding extra endpoints (e.g. /health, /admin/reset) does
-# not affect scoring.
+[components]
+C1 = { name = "register_decoding", weight = 20, covers = "S3 decode of both maps, rejection of missing/out-of-range/invalid-status" }
+C2 = { name = "history_dedup",     weight = 20, covers = "S4 historical storage, composite-key dedup, strict ordering" }
+C3 = { name = "latest_state",      weight = 20, covers = "S5 latest-state predicate, restart detection, history-only isolation" }
+C4 = { name = "alarm_lifecycle",   weight = 20, covers = "S6/S7 five alarms, two independent paths, transition edges" }
+C5 = { name = "api_concurrency",   weight = 20, covers = "S8/S9 REST contract, filters, concurrent-poll safety, all failure modes" }

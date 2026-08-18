@@ -62,21 +62,13 @@ def evaluate_telemetry_alarms(
     """Return the desired ACTIVE-state (True/False) of alarms 1-4 for a reading
     that has just become the latest state.
 
-    HIGH_TEMPERATURE:    temperature_c > map max
-    HIGH_VIBRATION:      vibration_mm_s >= 15.0
-    CRITICAL_VIBRATION:  vibration_mm_s >= 25.0
-    PRESSURE_FAULT:      pressure_kpa < map min
+    TODO(agent): implement the four conditions (A7):
+        HIGH_TEMPERATURE:    temperature_c > map max
+        HIGH_VIBRATION:      vibration_mm_s >= 15.0
+        CRITICAL_VIBRATION:  vibration_mm_s >= 25.0
+        PRESSURE_FAULT:      pressure_kpa < map min
     """
-    temp_max = map_max_temperature(register_map)
-    pres_min = map_min_pressure(register_map)
-    vib = decoded.vibration_mm_s
-    return {
-        ALARM_HIGH_TEMPERATURE: decoded.temperature_c > temp_max,
-        ALARM_HIGH_VIBRATION: vib >= 15.0,
-        ALARM_CRITICAL_VIBRATION: vib >= 25.0,
-        ALARM_PRESSURE_FAULT: decoded.pressure_kpa > pres_min,
-    }
-
+    raise NotImplementedError("evaluate_telemetry_alarms is not implemented")
 
 def communication_lost_active(consecutive_failures: int) -> bool:
     """COMMUNICATION_LOST condition: counter >= threshold (§6)."""
