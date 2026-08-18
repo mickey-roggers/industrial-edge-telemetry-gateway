@@ -158,7 +158,7 @@ Modes include `normal`, `timeout`, `5xx`, `notfound`, `malformed`, `missing`,
 
 ## 11. What you are given
 
-- `starter/app/` — a scaffold (you may use it or start fresh).
+- `environment/app/` — a scaffold (you may use it or start fresh).
 - `environment/simulator/` — the simulator (read-only).
 - `tests/` — the sealed verifier; treat it as the grading oracle.
 - `solution/app/` — a reference implementation (do not copy; it is the answer key).

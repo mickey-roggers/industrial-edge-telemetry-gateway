@@ -43,7 +43,7 @@ notes = "hidden matrix folded into the component checks; 74 total checks in veri
 [artifacts]
 simulator = "environment/simulator/simulator.py"
 reference = "solution/app"
-starter   = "starter/app"
+starter   = "environment/app"
 verifier  = "tests/verifier_runner.py"
 entrypoint_script = "tests/test.sh"
 
