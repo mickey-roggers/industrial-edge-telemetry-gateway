@@ -57,7 +57,7 @@ A reading being **stored in history** and a reading becoming the machine's **cur
 
 ## 3. Register Maps (fully specified — implement exactly, do not invent additional maps)
 
-| Register | Meaning | Conversion | `standard-v1` range | `high-temp-v1` range |
+| Register | Meaning | Conversion | `standard-v1` normal band | `high-temp-v1` normal band |
 |---|---|---|---|---|
 | 40001 | Temperature | `raw / 10.0` → °C | −40.0 … 120.0 | −40.0 … 180.0 |
 | 40002 | Pressure | `raw / 100.0` → kPa | 0.0 … 1500.0 | 0.0 … 2000.0 |
@@ -73,7 +73,11 @@ Status enum:
 | 2 | FAULT | FAULT |
 | 3 | *(invalid)* | MAINTENANCE |
 
-**Rejection rule:** any missing required register, any decoded value outside its map's range, or an unrecognized status code for that map causes the **entire reading** to be rejected — no history entry, no state update, counts as a failure toward COMMUNICATION_LOST (§6). Which map applies is a property of the device (`register_map` field from `GET /devices`) — do not hard-code a single map; the hidden verifier tests both.
+The numeric bands above are the map-specific **normal operating bands** used by the alarm engine (§7). A value just above or below a normal band is still a valid machine reading if it is physically plausible; it is stored, can become latest state, and may raise an alarm.
+
+**Physical validity envelope for Stage-A rejection:** reject temperature outside −273.15 … 1000.0 °C, pressure outside −100.0 … 50000.0 kPa, or vibration outside −100.0 … 1000.0 mm/s. These values represent impossible/corrupt sensor data rather than abnormal-but-real operation.
+
+**Rejection rule:** any missing required register, any decoded value outside the physical validity envelope, or an unrecognized status code for that map causes the **entire reading** to be rejected — no history entry, no state update, counts as a failure toward COMMUNICATION_LOST (§6). Which map applies is a property of the device (`register_map` field from `GET /devices`) — do not hard-code a single map; the hidden verifier tests both.
 
 ---
 
@@ -84,7 +88,7 @@ A reading is stored in history **if and only if all four hold**:
 1. The poll response was syntactically valid (not a timeout, 5xx, 404, or malformed JSON).
 2. `(device_id, sequence)` has never been stored before.
 3. All four required registers are present.
-4. Every decoded value is inside that device's map-specific range, and the status code is valid for that map.
+4. Every decoded numeric value is inside the physical validity envelope, and the status code is valid for that device's map.
 
 If stored, the reading is written to history **unconditionally** — independent of whether it will become the new latest state (§5). History is always returned ordered by `(timestamp ASC, sequence ASC)`.
 
@@ -174,7 +178,7 @@ For each machine, on each `POST /poll`:
 1. Call the simulated device API for this machine.
 2. If response is not syntactically valid (timeout / 5xx / 404 / malformed JSON):
    -> increment consecutive-failure counter for this machine. STOP (this machine done).
-3. If any required register is missing, OR any value is outside the map range,
+3. If any required register is missing, OR any value is outside the physical validity envelope,
    OR the status code is invalid for that map:
    -> reject the reading entirely (no history row).
    -> increment consecutive-failure counter. STOP.

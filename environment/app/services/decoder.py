@@ -5,8 +5,8 @@ device (its ``register_map`` field), never hard-coded. Two maps are supported:
 ``standard-v1`` and ``high-temp-v1``.
 
 A reading is ``(raw_registers, register_map) -> DecodedReading | Rejection``.
-On any missing required register, out-of-range decoded value, or invalid status
-code the *entire* reading is rejected.
+On any missing required register, physically impossible decoded value, or
+invalid status code the *entire* reading is rejected.
 """
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ from typing import Optional
 
 REQUIRED_REGISTERS = (40001, 40002, 40003, 40004)
 
-# Map-name -> (min, max) for each measured register.
+# Map-name -> normal operating band for each measured register.
 TEMP_RANGES = {
     "standard-v1": (-40.0, 120.0),
     "high-temp-v1": (-40.0, 180.0),
@@ -35,24 +35,17 @@ VALID_STATUS_CODES = {
     "high-temp-v1": {0, 1, 2, 3},
 }
 
-# PHYSICAL ACCEPTANCE ENVELOPE (resolves the §3 / §7 contradiction).
+# PHYSICAL ACCEPTANCE ENVELOPE.
 #
 # Register scaling: temperature & vibration are in units of 0.1 (raw 253 -> 25.3 C),
 # pressure in units of 0.01 (raw 10132 -> 101.32 kPa). The simulator's
 # "outofrange" mode uses raw 99999 (-> 9999.9 C) to mean "out of range".
 #
-# §3.11 says any decoded value outside "its map's range" is rejected at Stage A.
-# But §7 defines HIGH_TEMPERATURE as `temperature_c > map_max` and PRESSURE_FAULT
-# as `pressure_kpa < map_min` -- i.e. an *out-of-range* value is precisely what
-# raises those alarms. Taken literally, both alarms could never fire.
-#
-# Resolution: the map's stated range is the NORMAL OPERATING BAND used by the
-# alarm thresholds. A reading is only REJECTED at Stage A when a decoded value
-# falls outside a wider PHYSICAL envelope (a value too extreme to be a real
-# sensor reading, e.g. 9999.9 C). A reading that merely exceeds an operational
-# limit is still valid data: it is stored in history, becomes the latest state,
-# and the corresponding alarm fires. The simulator's "outofrange" mode (9999.9 C)
-# stays rejected; the alarm-triggering values in Component 4 stay accepted.
+# The map ranges are normal operating bands used by alarm thresholds. Stage A
+# rejects only values outside this wider physical envelope: values too extreme
+# to be plausible sensor data, e.g. simulator mode "outofrange" at 9999.9 C.
+# A reading that merely exceeds an operational limit is still valid data: it is
+# stored in history, may become latest state, and can fire an alarm.
 PHYSICAL_ENVELOPE = {
     "temperature_c": (-273.15, 1000.0),   # 9999.9 C rejected; 121/150/180 accepted (alarm)
     "pressure_kpa": (-100.0, 50000.0),    # slight vacuum allowed; huge rejected
@@ -98,8 +91,9 @@ def decode_registers(
     TODO(agent): implement A3. Apply the device's register_map scaling
     (temperature & vibration = raw / 10.0; pressure = raw / 100.0; status is a
     direct enum). Reject the ENTIRE reading when any required register is
-    missing, any decoded value is outside the map's range, or the status code is
-    invalid for that map. Return (DecodedReading, None) on success, else
+    missing, any decoded numeric value is outside the physical validity
+    envelope, or the status code is invalid for that map. Return
+    (DecodedReading, None) on success, else
     (None, DecodeRejection).
     """
     raise NotImplementedError("decode_registers is not implemented")
