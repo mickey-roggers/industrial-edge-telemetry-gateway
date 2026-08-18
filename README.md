@@ -1,311 +1,110 @@
 # Industrial Edge Telemetry Gateway
 
-A lightweight, extensible gateway that collects, normalizes, and forwards telemetry from industrial edge devices to cloud or on-prem destinations. Designed for reliability, low-latency processing, and easy deployment (Docker-first).
+An **Odyssey task bundle** — a self-contained, verifier-graded software-engineering task. A frontier coding agent is given an incomplete FastAPI gateway (`environment/app`) and must finish it so that it correctly discovers and polls a simulated machine fleet, decodes raw Modbus-style registers into engineering units, maintains history and latest state, and drives a deterministic alarm state machine. The reference solution under `solution/` proves the task is solvable and drives the sealed verifier to full reward.
 
-Badges: (add CI, docker build, license badges here)
+## What the gateway does
 
-- Language: Python (primary)
-- Secondary: Shell, Dockerfile
+The gateway is a small FastAPI service that:
 
-Table of contents
-- [Overview](#overview)
-- [Key features](#key-features)
-- [Repository structure](#repository-structure)
-- [Architecture & data flow](#architecture--data-flow)
-  - [High-level flowchart (Mermaid)](#high-level-flowchart-mermaid)
-  - [Component diagram (Mermaid)](#component-diagram-mermaid)
-- [Quickstart (Docker)](#quickstart-docker)
-- [Configuration](#configuration)
-- [Usage](#usage)
-  - [REST API examples](#rest-api-examples)
-  - [CLI examples](#cli-examples)
-- [Logging & monitoring](#logging--monitoring)
-- [Security considerations](#security-considerations)
-- [Development setup](#development-setup)
-- [Testing](#testing)
-- [Contributing](#contributing)
-- [License & contact](#license--contact)
+1. Discovers a fleet of simulated machines from a local simulator.
+2. Polls each machine for raw registers.
+3. Decodes registers into engineering units using device-specific maps.
+4. Stores every valid, unique reading in history (composite-key dedup).
+5. Maintains the correct "latest" machine state using exact ordering and restart rules.
+6. Evaluates a deterministic alarm state machine (5 alarm types, 2 trigger paths).
+7. Exposes a REST API for querying machines, status, history, and alarms.
 
-Overview
---------
-The Industrial Edge Telemetry Gateway accepts telemetry (metrics, events, traces) from industrial devices and local edge systems, performs lightweight processing (validation, transformation, batching), optionally persists to a local store (for offline resilience), and forwards normalized events to one or more upstream destinations (cloud IoT services, message brokers, time-series DBs).
+## Repository structure
 
-Typical use-cases:
-- Collecting telemetry from PLCs, RTUs, OPC-UA servers, Modbus devices.
-- Local aggregation to minimize cloud egress and reduce cost.
-- Edge pre-processing and enrichment (unit conversion, tagging).
-- Buffered, reliable delivery to cloud endpoints.
-
-Key features
-------------
-- Protocol adapters / connectors (HTTP, MQTT, OPC-UA, Modbus — adapters pluggable)
-- Normalization pipeline (validators, enrichers, transformers)
-- Local buffering with configurable persistence for intermittent connectivity
-- Pluggable output sinks: MQTT, AMQP, HTTP (REST), file, time-series DB
-- Docker-ready; can be deployed standalone, in k8s, or via compose
-- Metrics and logs for observability
-- Auth & TLS support for secure transport
-
-Repository structure
---------------------
-Example top-level layout (adjust if actual layout differs):
-
-- bin/                       — helper scripts and CLI wrappers
-- Dockerfile                 — image build
-- docker-compose.yml         — local compose example
-- requirements.txt           — Python dependencies
-- src/
-  - gateway/                 — main application package
-    - adapters/              — protocol adapters (mqtt, http, opcua, modbus)
-    - pipeline/              — validation, transformation, enrichment stages
-    - sinks/                 — output sinks (cloud, file, db)
-    - storage/               — local buffering/persistence
-    - api/                   — REST/management API
-    - config.py              — configuration loader
-    - main.py                — application entrypoint
-- tests/                     — unit and integration tests
-- scripts/                   — dev / deployment scripts
-- README.md
-
-Architecture & data flow
-------------------------
-This section provides conceptual diagrams illustrating how telemetry flows through the gateway and how components interact.
-
-High-level flowchart (Mermaid)
------------------------------
-Below is a high-level data flow showing ingestion, processing, local buffering, and forwarding. (Render with a Mermaid-capable viewer.)
-
-```mermaid
-flowchart LR
-  subgraph EDGE
-    D[Devices & Sensors] -->|Telemetry| IN(Protocol Adapters / Ingest)
-    IN --> P(Pipeline: validate, transform, enrich)
-    P --> B(Local Buffer / Persistence)
-  end
-
-  B -->|Forward| S[(Sinks / Upstream Destinations)]
-  P -->|Metrics| M[Metrics & Health]
-  IN -->|Management API| API[Management / Admin API]
-  S -->|Ack/Retry| B
+```
+.
+├── task.toml              # [metadata] [verifier] [agent] [environment]
+├── instruction.md         # the problem statement (§1–§12)
+├── README.md
+├── .dockerignore
+├── .gitignore
+├── environment/           # the sandbox build → /app (the STARTING state the agent sees)
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── app/               # incomplete FastAPI app (stubs + subtle bugs)
+│   └── simulator/         # local machine simulator
+├── solution/              # the reference solution (oracle)
+│   ├── app/               # complete, correct implementation
+│   └── solve.sh           # oracle entrypoint (runs the verifier against solution/app)
+└── tests/                 # the sealed verifier
+    ├── test.sh            # verifier entrypoint
+    └── verifier_runner.py # 74 checks across 5 components
 ```
 
-Component diagram (Mermaid)
----------------------------
-Shows components and their roles.
+## REST API
 
-```mermaid
-flowchart TB
-  Devices --> Adapters[Adapters: HTTP / MQTT / OPC-UA / Modbus]
-  Adapters --> Pipeline[Pipeline: validators / enrichers / transformers]
-  Pipeline --> Buffer[Local Buffer / DB (sqlite/leveldb)]
-  Buffer --> Dispatcher[Dispatcher]
-  Dispatcher -->|To Cloud| Sinks[MQTT Broker / HTTP Endpoint / TSDB]
-  Dispatcher -->|To File| FileSink[File/Archive]
-  subgraph Observability
-    Pipeline --> Metrics[Prometheus metrics]
-    Logs[Log output] --> Monitoring[Logging backend]
-  end
-  API[Management API] --> Adapters
-  API --> Pipeline
-```
+| Method | Path | Description |
+|---|---|---|
+| POST | `/poll` | Poll all machines once; returns `{polled, stored, history_only, failures}` |
+| GET | `/machines` | Summary per machine (`id`, `status`, `last_seen`, `active_alarms`) |
+| GET | `/machines/{id}/status` | Latest state only |
+| GET | `/machines/{id}/history?from=&to=&limit=` | Stage-A history (filterable) |
+| GET | `/alarms?machine_id=&state=&severity=` | Filterable alarm list |
+| GET | `/health` | Health check |
+| POST | `/admin/reset` | Test convenience: wipe state + rediscover (not part of the §9 contract) |
 
-Data flow description
-- Ingest: adapters accept telemetry in various protocols. Each adapter translates protocol-specific payloads into the gateway's internal event model.
-- Pipeline: events pass through a configurable pipeline — validation, enrichment (e.g., adding device metadata), transformation (unit conversion), and routing decisions.
-- Buffer: events are buffered locally (in-memory + durable backing) to survive upstream outages, with configurable retention and backpressure handling.
-- Dispatcher / Sink: events are batched and delivered to configured sinks with retry/backoff logic. Delivery can be at-least-once; deduplication optional.
-- Management API: exposes health, metrics, config reload, and manual replay/flush operations.
+## Register decoding
 
-Quickstart (Docker)
--------------------
-1. Build the image:
+Four registers are read from each device:
+
+| Register | Meaning | Scaling |
+|---|---|---|
+| 40001 | Temperature | raw ÷ 10 → °C |
+| 40002 | Pressure | raw ÷ 100 → kPa |
+| 40003 | Vibration | raw ÷ 10 → mm/s |
+| 40004 | Status code | direct |
+
+Two register maps are supported and are a property of the device (never hard-coded): `standard-v1` and `high-temp-v1`.
+
+Status codes: `0` STOPPED, `1` RUNNING, `2` FAULT, `3` MAINTENANCE (code `3` is invalid for `standard-v1`).
+
+Normal operating bands per map:
+
+| Map | Temp (°C) | Pressure (kPa) | Vibration (mm/s) |
+|---|---|---|---|
+| standard-v1 | −40 … 120 | 0 … 1500 | 0 … 50 |
+| high-temp-v1 | −40 … 180 | 0 … 2000 | 0 … 60 |
+
+A reading is rejected *entirely* if it is missing any required register, decodes to a physically impossible value (outside a wider physical acceptance envelope), or carries an invalid status code for its map. A reading that merely exceeds a normal operating band is still valid data — it is stored in history, may become latest state, and can fire an alarm.
+
+## Alarms (5 types, 2 trigger paths)
+
+| Alarm | Severity | Trigger |
+|---|---|---|
+| HIGH_TEMPERATURE | WARNING | temperature > map max |
+| HIGH_VIBRATION | WARNING | vibration ≥ 15.0 mm/s |
+| CRITICAL_VIBRATION | CRITICAL | vibration ≥ 25.0 mm/s |
+| PRESSURE_FAULT | CRITICAL | pressure < map min |
+| COMMUNICATION_LOST | CRITICAL | 3 consecutive failures |
+
+Alarms 1–4 are evaluated **only** when a reading becomes the new latest state; a history-only reading never touches them. COMMUNICATION_LOST is evaluated once per `POST /poll` for every machine, independent of the latest-state outcome. Each alarm is a single instance per `(machine_id, alarm_type)`, either ACTIVE or CLEARED.
+
+## The verifier
+
+`tests/test.sh` is the sealed entrypoint: it builds the environment, starts the simulator, launches the app, and runs `verifier_runner.py`. Scoring is additive across **5 components** (20% each): register decoding, history/dedup, latest state, alarm lifecycle, and API + concurrency + failures. The reference solution passes **74/74 checks**, including a hidden matrix (multi-machine interleaving, restarts, duplicates, mixed failure modes, and concurrent overlapping polls).
+
+## Starter vs. solution
+
+- **Starter** (`environment/app`): compiles and boots, but contains three `NotImplementedError` stubs (`decode_registers`, `should_become_latest_state`, `evaluate_telemetry_alarms`) and two subtle bugs (dedup key compares `sequence<=?` instead of `=?`; the poller's reject branch resets rather than increments the failure counter).
+- **Solution** (`solution/app`): the complete, correct implementation that passes the full verifier.
+
+## Running locally
+
 ```bash
-docker build -t industrial-edge-telemetry-gateway:latest .
+# Run the sealed verifier against the reference solution (oracle):
+bash solution/solve.sh
+
+# Run the verifier against an arbitrary app directory:
+GATEWAY_DIR=<path-to-app> bash tests/test.sh
 ```
 
-2. Run with docker:
-```bash
-docker run -d \
-  --name edge-gateway \
-  -p 8080:8080 \          # management API
-  -p 1883:1883 \          # optionally expose MQTT if adapter needs it
-  -e GATEWAY_CONFIG=/etc/gateway/config.yml \
-  -v /var/lib/edge-gateway:/data \
-  industrial-edge-telemetry-gateway:latest
-```
+The verifier expects Python 3.12 with FastAPI, httpx, uvicorn, and pydantic, and starts the simulator itself — no runtime network is required.
 
-3. Or use docker-compose (example snippet below):
+## Metadata
 
-```yaml
-version: "3.8"
-services:
-  gateway:
-    image: industrial-edge-telemetry-gateway:latest
-    ports:
-      - "8080:8080"
-      - "1883:1883"
-    environment:
-      - CONFIG_PATH=/etc/gateway/config.yml
-    volumes:
-      - ./config:/etc/gateway
-      - ./data:/data
-    restart: unless-stopped
-```
-
-Configuration
--------------
-Configuration is file-based (YAML/JSON) and/or environment variables. Example minimal config (config.yml):
-
-```yaml
-server:
-  host: 0.0.0.0
-  port: 8080
-
-adapters:
-  mqtt:
-    enabled: true
-    listen_port: 1883
-  http:
-    enabled: true
-    listen_port: 8081
-
-pipeline:
-  validators:
-    - schema: device_telemetry_v1
-  enrichers:
-    - add_device_metadata
-  transformers:
-    - convert_units
-
-storage:
-  type: sqlite
-  path: /data/buffer.db
-  max_items: 10000
-
-sinks:
-  - type: http
-    name: cloud_ingest
-    endpoint: "https://cloud.example.com/ingest"
-    batch_size: 100
-    retries: 5
-    timeout_ms: 10000
-```
-
-Environment variables (recommended)
-- GATEWAY_CONFIG — path to configuration file
-- LOG_LEVEL — debug / info / warn / error
-- STORAGE_PATH — override storage path
-- METRICS_PORT — port to serve Prometheus metrics
-
-Usage
------
-Management API
-- GET /health — health check
-- GET /metrics — Prometheus metrics
-- POST /config/reload — reload configuration
-- GET /buffers — view buffer status
-- POST /buffers/flush — force-forward buffered events
-
-REST API examples
-- Health:
-```bash
-curl http://localhost:8080/health
-```
-- Reload config:
-```bash
-curl -X POST http://localhost:8080/config/reload
-```
-
-CLI examples
-- Start gateway in foreground:
-```bash
-python -m gateway.main --config ./config/config.yml
-```
-- Run tests:
-```bash
-pytest -q
-```
-
-Logging & monitoring
---------------------
-- Logs: structured JSON logs by default. Configure LOG_LEVEL and an external logging endpoint if needed.
-- Metrics: Prometheus exporter available at /metrics. Monitor:
-  - ingestion rate
-  - pipeline latency
-  - buffer size and retention
-  - sink success/failure rates
-- Alerts:
-  - buffer size near capacity
-  - continuous sink failures
-  - high pipeline error rate
-
-Security considerations
------------------------
-- TLS: enable TLS termination for exposed endpoints (MQTT over TLS / HTTPS).
-- Authentication: enable adapter-level auth where possible (MQTT username/password, client certificates).
-- Secrets: store credentials in a secure store (Vault, k8s secrets) and avoid committing them to git.
-- Network: run behind an edge firewall or within a secure edge network zone.
-- Update policy: apply regular security updates to base images and Python dependencies.
-
-Development setup
------------------
-1. Create virtualenv and install deps:
-```bash
-python -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-```
-
-2. Run unit tests and linting:
-```bash
-pytest
-flake8 src
-```
-
-3. Run locally:
-```bash
-python -m src.gateway.main --config ./config/config.yml
-```
-
-Testing
--------
-- Unit tests: located under tests/unit
-- Integration tests: tests/integration (these may require docker-compose to run upstream mocks)
-- Recommended CI: run lint, unit tests, build Docker image, run selected integration smoke tests.
-
-Contributing
-------------
-Contributions are welcome. Suggested workflow:
-1. Fork repo, create a branch feature/issue-123
-2. Add tests for new features/bug fixes
-3. Open a PR describing changes and include any migration steps
-4. Maintain consistent code style and add/update docs
-
-Commit message convention (recommended):
-- feat(): new feature
-- fix(): bug fix
-- docs(): documentation changes
-- chore(): tooling or build changes
-
-License & contact
------------------
-- License: (insert license name — e.g., MIT) — add LICENSE file
-- Maintainer: mickey-roggers
-- Contact / Issues: Open an issue in this repository for bugs and feature requests.
-
-Appendix — common deployment patterns
-------------------------------------
-1. K8s deployment: Deploy the gateway as a Deployment + Service, use PersistentVolume for buffer storage, and configure horizontal pod autoscaling based on CPU or custom metrics like queue depth.
-
-2. Edge HA pattern: Run two replicas with shared or replicated storage; use sticky routing for device connections.
-
-3. Offline-first: Configure local retention policy and scheduled retries to empty buffer when connectivity is available.
-
-Notes and next steps
---------------------
-- Tailor example adapter and sink configs to match the actual supported protocols and cloud provider endpoints in your code.
-- If you want, I can:
-  - commit this README to the repository,
-  - generate a diagram image (PNG/SVG) from the Mermaid diagrams and add it to the repo,
-  - or extract accurate details (adapter names, API routes, actual file tree) by inspecting the repository and updating the README to match the code.
-Please tell me which of these you'd like me to do next.
+`task.toml` declares the task identity and configuration: `collectionFamily = "Product clone"`, `taskFamily = "systems_integration"`, `verifierFamily = "programmatic"`, 2 CPUs / 4096 MB memory / 2048 MB storage, agent timeout 18,000 s, and fully offline (`network_mode = "none"` across build, rollout, and grading phases).

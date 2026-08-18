@@ -22,6 +22,7 @@ environmentSummary = """Python 3.12, FastAPI, httpx, uvicorn, SQLite, asyncio. F
 family = "programmatic"
 command = "bash tests/test.sh"
 timeout_seconds = 1800
+network_mode = "none"
 
 [agent]
 network_mode = "none"
