@@ -1,0 +1,62 @@
+# Odyssey task descriptor — Industrial Edge Telemetry Gateway
+# This file is authoritative for grading metadata and component weighting.
+
+[task]
+id = "industrial-edge-telemetry-gateway"
+title = "Industrial Edge Telemetry Gateway"
+category = "backend"
+difficulty = "hard"
+estimated_minutes = 120
+spec_version = "1.0"
+
+[entrypoint]
+# Sealed verifier: starts simulator + candidate gateway, drives scenarios, scores.
+command = "bash tests/test.sh"
+timeout_seconds = 600
+# The candidate's gateway-under-test is mounted at /app in the container; the
+# verifier also accepts GATEWAY_DIR and falls back to /task/solution/app.
+gateway_dir_env = "GATEWAY_DIR"
+default_gateway_dir = "/app"
+
+[rubric]
+# Five independent components, each 0 or full weight (no partial within a
+# component); scoring is additive across components. A check that is flaky or
+# environment-dependent is disqualified from grading.
+components = 5
+weight_per_component = 20
+pass_threshold_percent = 100   # reference solution must score 100%; candidate
+                               # is scored as (passed_components / 5) * 100.
+
+[components]
+C1 = { name = "register_decoding", weight = 20, covers = "§3 decode of both maps, rejection of missing/out-of-range/invalid-status" }
+C2 = { name = "history_dedup",     weight = 20, covers = "§4 historical storage, composite-key dedup, strict ordering" }
+C3 = { name = "latest_state",      weight = 20, covers = "§5 latest-state predicate, restart detection, history-only isolation" }
+C4 = { name = "alarm_lifecycle",   weight = 20, covers = "§6/§7 five alarms, two independent paths, transition edges" }
+C5 = { name = "api_concurrency",   weight = 20, covers = "§8/§9 REST contract, filters, concurrent-poll safety, all failure modes" }
+
+[hidden]
+# Hidden scenarios reuse the same five components via dynamic machine IDs, both
+# register maps, shuffled delivery order, restart-boundary probes, and
+# /history-vs-/status divergence so the history/state-collapse exploit cannot pass.
+notes = "hidden matrix folded into the component checks; 74 total checks in verifier_runner.py"
+
+[artifacts]
+simulator = "environment/simulator/simulator.py"
+reference = "solution/app"
+starter   = "starter/app"
+verifier  = "tests/verifier_runner.py"
+entrypoint_script = "tests/test.sh"
+
+[grading_contract]
+# The candidate MUST implement the gateway so that tests/test.sh exits 0.
+# The five required endpoints are:
+required_endpoints = [
+  "POST /poll",
+  "GET  /machines",
+  "GET  /machines/{id}/status",
+  "GET  /machines/{id}/history",
+  "GET  /alarms",
+]
+# The simulator's control API is used by the verifier only and is NOT part of the
+# candidate contract. Adding extra endpoints (e.g. /health, /admin/reset) does
+# not affect scoring.

@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+
+# Virtual environments
+.venv/
+.venv-*/
+venv/
+env/
+
+# Databases & test scratch artifacts
+*.db
+*.sqlite
+*.sqlite3
+dbg.db
+t*.db
+*.log
+.sim.log
+
+# Dev scratch scripts
+_launch.sh
+_reqs_dev.txt
+_smoke.py
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
