@@ -88,12 +88,6 @@ def _build_normal(spec: dict, register_map: str) -> dict:
     }
 
 
-if __name__ == "__main__":
-    import uvicorn
-
-    uvicorn.run(app, host="127.0.0.1", port=SIM_PORT, log_level="warning")
-
-
 @app.get("/health")
 async def health():
     return {"status": "ok"}
@@ -220,3 +214,9 @@ async def control_reset():
         DEVICES.clear()
         QUEUES.clear()
     return {"ok": True, "devices": 0}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="127.0.0.1", port=SIM_PORT, log_level="warning")
