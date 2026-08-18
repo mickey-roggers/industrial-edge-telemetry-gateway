@@ -1,8 +1,8 @@
 # Odyssey task bundle: Industrial Edge Telemetry Gateway
-# Builds an offline image that runs the sealed verifier (tests/test.sh) which
-# starts the bundled simulator + the candidate gateway and scores 5 components.
-# Build from the bundle root:  docker build -f environment/Dockerfile .
-FROM python:3.11-slim
+# Builds an image whose runtime is fully offline: the simulator and verifier are
+# bundled into the image and no network access is required while the task runs.
+# Build from the bundle root: docker build -f environment/Dockerfile .
+FROM python:3.12-slim
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
@@ -10,7 +10,8 @@ ENV PYTHONUNBUFFERED=1 \
 
 WORKDIR /task
 
-# Install dependencies first (cached layer).
+# Dependencies are installed at image-build time. The finished task runtime
+# does not require network access.
 COPY environment/requirements.txt /task/requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
