@@ -29,3 +29,7 @@ _smoke.py
 Thumbs.db
 .idea/
 .vscode/
+
+*.db-shm
+*.db-wal
+*.db-journal
