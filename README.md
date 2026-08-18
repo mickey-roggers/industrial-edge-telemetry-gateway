@@ -161,6 +161,34 @@ curl http://127.0.0.1:8111/alarms
 
 The simulator's control API (`POST /control/device/{id}/script`) can inject `outofrange`, `invalidstatus`, `timeout`, `5xx`, `notfound`, `malformed`, and `missing` responses to exercise the failure modes interactively.
 
+## Docker
+
+The `environment/Dockerfile` packages the entire bundle into a self-contained, offline image that runs the sealed verifier — the same image the Odyssey grader builds and runs. Dependencies are baked in at build time; there is no runtime network.
+
+**Build** (from the repo root):
+
+```bash
+docker build -f environment/Dockerfile -t edge-gateway .
+```
+
+**Run the reference** (expects `74/74`):
+
+```bash
+docker run --rm edge-gateway
+```
+
+**Run the starter** (incomplete — expects to fail):
+
+```bash
+docker run --rm -e GATEWAY_DIR=/task/environment/app edge-gateway
+```
+
+When no `/app` is mounted, `tests/test.sh` falls back to the bundled reference (`solution/app`), so the image self-validates out of the box. Docker is optional — the [Testing](#testing) commands run the same verifier without it, using the project venv.
+
 ## Metadata
 
 `task.toml` declares the task identity and configuration: `collectionFamily = "Product clone"`, `taskFamily = "systems_integration"`, `verifierFamily = "programmatic"`, 2 CPUs / 4096 MB memory / 2048 MB storage, agent timeout 18,000 s, and fully offline (`network_mode = "none"` across build, rollout, and grading phases).
+
+## License
+
+[MIT](LICENSE) © 2026 Mickey Roggers.
