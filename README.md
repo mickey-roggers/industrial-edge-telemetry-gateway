@@ -97,7 +97,19 @@ Alarms 1–4 are evaluated **only** when a reading becomes the new latest state;
 
 > **On Windows, run everything in Git Bash** (Start menu → "Git Bash"), not PowerShell or CMD. The scripts use bash syntax (`export`, `VAR=value`, and `\` line continuations) that other shells don't understand.
 
-The test script auto-detects the project venv (`.venv-dev`); it only needs Python 3.12 with `fastapi`, `httpx`, `uvicorn`, and `pydantic`. No manual install is required if the venv already exists.
+### First-time setup (Windows)
+
+The test script auto-detects the project venv by an **exact name — `.venv-dev`** — and on Windows specifically looks for `.venv-dev/Scripts/python.exe`. If the venv is named anything else (e.g. `.venv`), the script won't find it and will fail with `Python interpreter lacks required packages`.
+
+```bash
+cd <repo-root>
+python -m venv .venv-dev                                   # NOTE: exactly ".venv-dev"
+.venv-dev/Scripts/python.exe -m pip install -r environment/requirements.txt
+bash solution/solve.sh                                      # should print 74/74
+```
+
+Only Python 3.12 with `fastapi`, `httpx`, `uvicorn`, and `pydantic` is required. On Linux/macOS the equivalent venv lives at `.venv/bin/python` or `.venv-dev/bin/python`, which the script also detects.
+
 
 ### 1. Full verifier against the reference (oracle)
 
